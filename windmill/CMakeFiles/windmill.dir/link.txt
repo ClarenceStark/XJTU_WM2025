@@ -1,0 +1,2 @@
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ar qc libwindmill.a CMakeFiles/windmill.dir/src/WMFunction.cpp.o CMakeFiles/windmill.dir/src/WMIdentify.cpp.o CMakeFiles/windmill.dir/src/WMInference.cpp.o CMakeFiles/windmill.dir/src/WMPredict.cpp.o
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib libwindmill.a
