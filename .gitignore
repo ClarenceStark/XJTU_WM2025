@@ -1,0 +1,9 @@
+# cmake
+build
+
+# vscode
+.vscode/*
+.cache/*
+# log
+log
+MvSdkLog

@@ -1,0 +1,50 @@
+#=====================================相机部分=====================================#
+
+#当前使用的相机序号，只连接一个相机时为0，多个相机在取流时可通过cam_index选择设备列表中对应顺序的相机
+cam_index: 0
+#===曝光时间===#
+enable_auto_exp: 0 # OFF
+energy_exp_time: 3000
+armor_exp_time: 1500
+#===白平衡===#
+#红色通道
+r_balance: 3600
+#绿色通道
+g_balance: 1024
+#蓝色通道
+b_balance: 1957
+#红色通道
+e_r_balance: 1500
+#绿色通道
+e_g_balance: 1024
+#蓝色通道
+e_b_balance: 4000
+#===以下参数重点参与实际帧率的调节===#
+#图像格式，设置为Bayer RG8，更多图像格式可前往MVS的SDK中寻找
+#此语句无法执行 本身也不需要修改 pixel_format: PixelType_Gvsp_BayerRG8
+#在经过测试之后，包括在官方SDK中没有调整Acquisition Frame Rate Control Enable的参数，不过在MVS软件中调试时此选项关闭后依然可以达到期望帧率
+#===其他参数===#
+#自动相机增益使能，0为OFF
+enable_auto_gain: 0
+#相机增益值
+gain: 16.9
+#相机伽马值，只有在伽马修正开启后有效
+gamma_value: 0.7
+#触发方式，从0至3依次为触发上升沿、下降沿、高电平、低电平
+trigger_activation: 0
+#设置帧率，仅在不设置外触发时起效
+frame_rate: 180.0
+#触发模式，ON为外触发，OFF为内触发，0为外触发
+enable_trigger: 0
+#触发源，0为MV_TRIGGER_SOURCE_LINE0
+trigger_source: 0
+
+cx: 697.7909321  # cx
+cy: 559.5145959  # cy
+fx: 2349.641948  # fx
+fy: 2351.226326  # fy
+k1: -0.041595291261727
+k2: 0.090691694332708
+k3: 0
+p1: 0
+p2: 0
