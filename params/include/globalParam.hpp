@@ -131,7 +131,7 @@ struct ArmorObject
 };
 struct WMObject
 {
-    cv::Point2f apex[4];
+    cv::Point2f apex[5];    //2025年 ，五点识别
     cv::Rect_<float> rect;
     int cls;
     int color;

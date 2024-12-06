@@ -23,7 +23,6 @@
 #define Pi 3.1415926
 WMIdentify::WMIdentify(GlobalParam &gp)
 {
-    // std::cout << "喵～" << std::endl;
     this->gp = &gp;
     this->t_start = std::chrono::system_clock::now().time_since_epoch().count() / 1e9;
     // 从gp中读取一些数据
@@ -37,6 +36,18 @@ WMIdentify::WMIdentify(GlobalParam &gp)
     this->R_emitate.x = 0;
     this->R_emitate.y = 0;
     this->data_img = cv::Mat::zeros(400, 800, CV_8UC3);
+    this->objectPoints = {
+        cv::Point3f(0, 0, 0),
+        cv::Point3f(0, 0.3733, 1.120),
+        cv::Point3f(0, 0.3422, 1.736),
+        cv::Point3f(0, -0.3422, 1.736),
+        cv::Point3f(0, -0.3733, 1.120)
+    };
+    this->_K_ = (cv::Mat_<double>(3, 3) << (float)2400, 0, (float)720,
+                0, (float)2400, (float)540,
+                0, 0, 1 );
+
+
     // 输出日志，初始化成功
     LOG_IF(INFO, this->switch_INFO) << "WMIdentify Successful";
 }
@@ -44,7 +55,6 @@ WMIdentify::WMIdentify(GlobalParam &gp)
 WMIdentify::~WMIdentify()
 {
     // WMIdentify之中的内容都会自动析构
-    // std::cout << "析构中，下次再见喵～" << std::endl;
     // 输出日志，析构成功
     LOG_IF(INFO, this->switch_INFO) << "~WMIdentify Successful";
 }
@@ -64,97 +74,55 @@ void WMIdentify::clear()
     LOG_IF(INFO, this->switch_INFO) << "clear Successful";
 }
 
-void WMIdentify::startWMIdentify(cv::Mat &input_img, Translator &ts)
-{
-    // 输入图片
-    this->receive_pic(input_img);
-    // 预处理
-    this->preprocess();
-    // 获取轮廓
-    this->getContours();
-    // 通过图像特征寻找扇页下半部分
-    this->getValidWingHalfHierarchy();
-    // 通过父子关系确定扇页下半部分
-    this->selectWing();
-    // 通过图像特征寻找扇页上半部分
-    this->getValidWingHatHierarchy();
-    // 通过与扇页下半部分距离确定扇页上半部分
-    this->selectWingHat();
-    // 通过图像特征寻找R
-    this->getVaildR();
-    // 通过图像位置确定R
-    this->selectR();
-    // 更新数据队列
-    this->updateList((double)ts.message.predict_time / 1000);
-}
 
 void WMIdentify::startWMINet(cv::Mat &input_img, Translator &ts)
 {
     // 输入图片
     this->receive_pic(input_img);
-   std::vector<WMObject> objects;
+    std::vector<WMObject> objects;
     detector.detect(this->img, objects);
       
-    // std::chrono::milliseconds start_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //     std::chrono::system_clock::now().time_since_epoch());
     this->list_stat = 0;
     // 对置信度排序
     std::sort(objects.begin(), objects.end(), [this](WMObject &a, WMObject &b)
               { return a.prob < b.prob; });
     for (auto object : objects)
     {
-
-        // std::cout<<"cls: "<<object.cls<<std::endl;
-        // std::cout<<object.color<<std::endl;
-        if (object.cls == 0 && ((object.color == 0 && gp->color == RED) || (object.color == 0 && gp->color == BLUE)) && (object.cls >= 0 && object.cls <= 5))
+        if (object.cls == 0 && ((object.color == 0 && gp->color == RED) || (object.color == 0 && gp->color == BLUE)) /*&& (object.cls >= 0 && object.cls <= 5)*/)
         {
           
 #if defined(DEBUGMODE) or defined(DEBUGHIT)
-
             cv::line(this->img, object.apex[0], object.apex[1], cv::Scalar(193, 182, 255), 3);
             cv::line(this->img, object.apex[1], object.apex[2], cv::Scalar(193, 182, 255), 3);
             cv::line(this->img, object.apex[2], object.apex[3], cv::Scalar(193, 182, 255), 3);
             cv::line(this->img, object.apex[3], object.apex[0], cv::Scalar(193, 182, 255), 3);
             cv::circle(this->img, (object.apex[3] + object.apex[2] + object.apex[1]) / 3, 5, cv::Scalar(0, 0, 255), -1);
 #endif // DEBUGMODE
-            float K_ab = abs(object.apex[1].x - object.apex[3].x) > 0.0001 ? (object.apex[1].y - object.apex[3].y) / (object.apex[1].x - object.apex[3].x) : 100000;
-            float AB_x_cte = (object.apex[1].x + object.apex[3].x) / 2;
-            float AB_y_cte = (object.apex[1].y + object.apex[3].y) / 2;
-            float length_AB = sqrt(CalDistSquare(object.apex[1], object.apex[3]));
-            float E_x = AB_x_cte + 2.7468 * length_AB / sqrt(1 + 1 / pow(K_ab, 2));
-            float E_y = -1 / K_ab * (E_x - AB_x_cte) + AB_y_cte;
-            if (((object.apex[3].x - object.apex[2].x) * (E_x - object.apex[2].x) + (object.apex[3].y - object.apex[2].y) * (E_y - object.apex[2].y)) <= 0)
-            {
-                E_x = AB_x_cte - 2.7468 * length_AB / sqrt(1 + 1 / pow(K_ab, 2));
-                E_y = -1 / K_ab * (E_x - AB_x_cte) + AB_y_cte;
-            }
+    
+            cv::Mat rVec, tVec;
+            cv::solvePnP(objectPoints, imagePoints, _K_, cv::Mat(), rVec, tVec);
+            cv::Mat rotation_matrix;
+            cv::Rodrigues(rVec, rotationMatrix);
+            
+            // double yaw = - std::atan2(rotationMatrix.at<double>(2, 0), rotationMatrix.at<double>(0, 0));
+            // double pitch = - std::atan2(rotationMatrix.at<double>(1, 0), rotationMatrix.at<double>(0, 0));
+            // double roll = std::atan2(rotationMatrix.at<double>(2, 1), rotationMatrix.at<double>(2, 2));
 
-            this->wing_center_list.push_back(object.apex[2]);
-            if (this->wing_center_list.size() >= 2)
-            {
-                this->wing_center_list.pop_front();
-            }
+            //使用的旋转矩阵 R 是针对Z-Y-X（也称作“飞机角”）顺序
+            // 计算 pitch (绕Y轴的旋转) 
+            pitch = atan2(-rotationMatrix.at<double>(2, 0), sqrt(rotationMatrix.at<double>(0, 0) * rotationMatrix.at<double>(0, 0) + rotationMatrix.at<double>(1, 0) * rotationMatrix.at<double>(1, 0))); 
+            // 计算 yaw (绕Z轴的旋转) 
+            yaw = atan2(rotationMatrix.at<double>(1, 0), rotationMatrix.at<double>(0, 0));
+            // 计算 roll (绕X轴的旋转) 
+            roll = atan2(rotationMatrix.at<double>(2, 1), rotationMatrix.at<double>(2, 2));
+            this->roll_list.emplace_back(roll);
 
-            // if (this->R_center_list.size() >= 2)
-            // {
-            //     this->R_center_list.pop_front();
-            // }
-
-            this->R_emitate.x = E_x;
-            this->R_emitate.y = E_y;
-#ifdef DEBUGMODE
-            // cv::circle(img, this->R_emitate, 5, cv::Scalar(255, 255, 255),-1);
-#endif
             this->list_stat = 1;
         }
     }
    
     this->preprocess();
-    //  std::chrono::milliseconds end_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //         std::chrono::system_clock::now().time_since_epoch());
-    //     float total_time = (end_ms - start_ms).count() / 1000.0;
-    //     std::cout << "idfpss: " << 1 / total_time << std::endl;
-    // 获取轮廓
+    
     this->getContours();
 
     // 通过图像特征寻找R
@@ -818,7 +786,7 @@ void WMIdentify::updateList(double time)
     {
         //this->wing_center_list.back().y*=gp->oval2cirel;
         //std::cout<<"now theta"<<CalAngle(this->wing_center_list.back(), this->R_center_list.back())<<std::endl;
-        this->angle_list.emplace_back(CalAngle(this->wing_center_list.back(), this->R_center_list.back()));
+        // this->angle_list.emplace_back(CalAngle(this->wing_center_list.back(), this->R_center_list.back()));
     }
 
     // 更新yaw队列

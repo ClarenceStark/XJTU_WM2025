@@ -46,11 +46,15 @@ private:
     int list_stat;
     double direction;
     std::deque<double> time_list;           //<! 时间队列
+    std::deque<double> roll_list;           //<! roll队列，用于angle初收集
     std::deque<double> angle_list;          //<! 角度队列
     std::deque<double> angle_velocity_list; //<! 角速度队列
     std::deque<double> R_yaw_list;
     uint32_t FanChangeTime;
     WMDetector detector;
+    std::vector<cv::Point3f> objectPoints;                  //世界系中关键点坐标
+    cv::Mat _K_ ;                                           //相机内参
+    
 
 public:
     /**
