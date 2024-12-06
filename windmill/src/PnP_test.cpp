@@ -36,13 +36,61 @@ using namespace std;
 //     cv::putText(image, "y", imagePoints[2], fontFace, fontScale, cv::Scalar(0, 255, 0), 4);
 //     cv::putText(image, "z", imagePoints[3], fontFace, fontScale, cv::Scalar(255, 0, 0), 4);
 // }
+void visualizeCameraViewpoint(const cv::Mat& image, const cv::Mat& cameraMatrix, const cv::Mat& distCoeffs,
+                              const cv::Mat& rvec, const cv::Mat& tvec, const std::vector<cv::Point3f>& objectPoints) {
+    // 计算平面法向量
+    cv::Point3f vec1 = objectPoints[1] - objectPoints[0];
+    cv::Point3f vec2 = objectPoints[3] - objectPoints[0];
+    cv::Point3f normal = vec1.cross(vec2); // 法向量
+    normal /= cv::norm(normal); // 单位化
+
+    // 平面方程 ax + by + cz + d = 0
+    float d = -(normal.x * objectPoints[0].x + normal.y * objectPoints[0].y + normal.z * objectPoints[0].z);
+
+    // 相机光轴方向（z轴）和相机位置
+    cv::Mat R;
+    cv::Rodrigues(rvec, R); 
+    cv::Mat cameraPosition = -R.t() * tvec; // 相机光心位置
+
+    cv::Mat zAxis = (cv::Mat_<double>(3, 1) << 0, 0, 1); 
+    cv::Mat zAxisWorld = R.t() * zAxis; // 相机系的z轴方向在世界系下向量
+
+    // 求光轴与符所在平面的交点
+    double t = -(normal.x * cameraPosition.at<double>(0) +
+                 normal.y * cameraPosition.at<double>(1) +
+                 normal.z * cameraPosition.at<double>(2) + d) /
+               (normal.x * zAxisWorld.at<double>(0) +
+                normal.y * zAxisWorld.at<double>(1) +
+                normal.z * zAxisWorld.at<double>(2));
+
+    cv::Point3f intersection(
+        cameraPosition.at<double>(0) + t * zAxisWorld.at<double>(0),
+        cameraPosition.at<double>(1) + t * zAxisWorld.at<double>(1),
+        cameraPosition.at<double>(2) + t * zAxisWorld.at<double>(2));
+
+    // 用cv::projectPoints将交点投影到图像平面
+    std::vector<cv::Point3f> worldPoints = {intersection};
+    std::vector<cv::Point2f> imagePoints;
+    cv::projectPoints(worldPoints, rvec, tvec, cameraMatrix, distCoeffs, imagePoints);
+
+    // 可视化
+    //cv::Mat resultImage = image.clone();
+    if (!imagePoints.empty()) {
+        cv::circle(image, imagePoints[0], 5, cv::Scalar(0, 0, 255), -1); // 红点标记交点
+        //cv::imshow("Camera Viewpoint", image);
+        //cv::waitKey(0);
+    } else {
+        std::cerr << "Error: Intersection point is not visible in the image." << std::endl;
+    }
+}
+
 void drawAxis(cv::Mat &image, cv::Mat &rvec, cv::Mat &tvec,
-              cv::Mat &cameraMatrix, cv::Mat &distCoeffs) {
+              cv::Mat &cameraMatrix, cv::Mat &distCoeffs, int &count) {
     // 定义坐标轴的3D点 (单位: 米)
     std::vector<cv::Point3f> axisPoints;
-    axisPoints.push_back(cv::Point3f(0.0165, 0.0165, 0));     // 原点
-    axisPoints.push_back(cv::Point3f(0.0565, 0.0165, 0));     // x轴终点
-    axisPoints.push_back(cv::Point3f(0.0165, 0.0565, 0));     // y轴终点
+    axisPoints.push_back(cv::Point3f(0.02, 0.02, 0));     // 原点
+    axisPoints.push_back(cv::Point3f(0.06, 0.02, 0));     // x轴终点
+    axisPoints.push_back(cv::Point3f(0.02, 0.06, 0));     // y轴终点
 
     // 计算相机z轴与世界z轴的夹角
     cv::Mat R;
@@ -54,7 +102,7 @@ void drawAxis(cv::Mat &image, cv::Mat &rvec, cv::Mat &tvec,
     double zLength = 0.2 * (1.0 - cosTheta); // 根据夹角动态调整z轴长度
     cout << cosTheta << endl;
     // 添加动态调整后的z轴终点
-    axisPoints.push_back(cv::Point3f(0.0165, 0.0165, -zLength)); // z轴终点（根据夹角动态调整）
+    axisPoints.push_back(cv::Point3f(0.02, 0.02, -zLength)); // z轴终点（根据夹角动态调整）
 
     // 将3D坐标轴的点投影到图像平面上
     std::vector<cv::Point2f> imagePoints;
@@ -73,7 +121,7 @@ void drawAxis(cv::Mat &image, cv::Mat &rvec, cv::Mat &tvec,
     cv::putText(image, "z", imagePoints[3], fontFace, fontScale, cv::Scalar(255, 0, 0), 4);
 }
 
-// 添加一个函数，用于对角点进行排序
+// 用于对角点进行排序
 // void sortCorners(std::vector<cv::Point2f>& corners) {
 //     // 计算质心
 //     cv::Point2f center(0, 0);
@@ -136,7 +184,8 @@ void sortCorners(std::vector<cv::Point2f>& corners) {
     corners = ordered;
 }
 
-void processFrame(cv::Mat &frame, cv::Mat &cameraMatrix, cv::Mat &distCoeffs) {
+void processFrame(cv::Mat &frame, cv::Mat &cameraMatrix, cv::Mat &distCoeffs, int &count) {
+    count++;
     double  PI = 3.14159265358979323846;
   
 
@@ -171,29 +220,31 @@ void processFrame(cv::Mat &frame, cv::Mat &cameraMatrix, cv::Mat &distCoeffs) {
         // 世界坐标系下的矩形的4个角点
         std::vector<cv::Point3f> objectPoints;
         objectPoints.push_back(cv::Point3f(0, 0, 0));       // 左下角
-        objectPoints.push_back(cv::Point3f(0.033, 0, 0));    // 右下角
-        objectPoints.push_back(cv::Point3f(0.033, 0.033, 0)); // 右上角
-        objectPoints.push_back(cv::Point3f(0, 0.033, 0));    // 左上角
+        objectPoints.push_back(cv::Point3f(0.04, 0, 0));    // 右下角
+        objectPoints.push_back(cv::Point3f(0.04, 0.04, 0)); // 右上角
+        objectPoints.push_back(cv::Point3f(0, 0.04, 0));    // 左上角
 
         // PnP解算，得到旋转向量和平移向量
         cv::Mat rvec, tvec;
         cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec,
                     tvec);
+
+        visualizeCameraViewpoint(frame, cameraMatrix, distCoeffs, rvec, tvec, objectPoints);
         
         cv::Mat rotation_matrix;
         double theta = rvec.at<double>(2);
         cv::Rodrigues(rvec, rotation_matrix);
         
-        double yaw = - std::atan2(rotation_matrix.at<double>(2, 0), rotation_matrix.at<double>(0, 0));
-        // double pitch = - std::atan2(rotation_matrix.at<double>(1, 0), rotation_matrix.at<double>(0, 0)) * 2;
-        double pitch = - std::atan2(rotation_matrix.at<double>(1, 0), rotation_matrix.at<double>(0, 0));
-        double roll = std::atan2(rotation_matrix.at<double>(2, 1), rotation_matrix.at<double>(2, 2));
+        // double yaw = - std::atan2(rotation_matrix.at<double>(2, 0), rotation_matrix.at<double>(0, 0));
+        // // double pitch = - std::atan2(rotation_matrix.at<double>(1, 0), rotation_matrix.at<double>(0, 0)) * 2;
+        // double pitch = - std::atan2(rotation_matrix.at<double>(1, 0), rotation_matrix.at<double>(0, 0));
+        // double roll = std::atan2(rotation_matrix.at<double>(2, 1), rotation_matrix.at<double>(2, 2));
 
-        double pitch1 = atan2(-rotation_matrix.at<double>(2, 0), sqrt(rotation_matrix.at<double>(0, 0) * rotation_matrix.at<double>(0, 0) + rotation_matrix.at<double>(1, 0) * rotation_matrix.at<double>(1, 0))); 
-            // 计算 yaw (绕Z轴的旋转) 
-        double yaw1 = atan2(rotation_matrix.at<double>(1, 0), rotation_matrix.at<double>(0, 0));
-            // 计算 roll (绕X轴的旋转) 
-        double roll1 = atan2(rotation_matrix.at<double>(2, 1), rotation_matrix.at<double>(2, 2));
+        // double pitch1 = atan2(-rotation_matrix.at<double>(2, 0), sqrt(rotation_matrix.at<double>(0, 0) * rotation_matrix.at<double>(0, 0) + rotation_matrix.at<double>(1, 0) * rotation_matrix.at<double>(1, 0))); 
+        //     // 计算 yaw (绕Z轴的旋转) 
+        // double yaw1 = atan2(rotation_matrix.at<double>(1, 0), rotation_matrix.at<double>(0, 0));
+        //     // 计算 roll (绕X轴的旋转) 
+        // double roll1 = atan2(rotation_matrix.at<double>(2, 1), rotation_matrix.at<double>(2, 2));
 
         cv::Mat Cw = -rotation_matrix.t() * tvec;
         // 计算从相机光心到世界原点的向量（V）
@@ -213,7 +264,7 @@ void processFrame(cv::Mat &frame, cv::Mat &cameraMatrix, cv::Mat &distCoeffs) {
         double Zx = Zc_w.at<double>(0, 0);
         double Zz = Zc_w.at<double>(2, 0);
 
-        // 计算 β（beta）
+        // 计��� β（beta）
         double beta = atan2(Zx, Zz); // Zc_w_xz 与世界z轴之间的夹角
 
         // 计算 φ（phi）
@@ -230,8 +281,9 @@ void processFrame(cv::Mat &frame, cv::Mat &cameraMatrix, cv::Mat &distCoeffs) {
         phi = phi * (180.0 / CV_PI);
         
         std::cout << "alpha: " << alpha << "\t beta: "<< beta << "\t phi: "<< phi << std::endl;
-        std::cout << "pitch: " << pitch / PI * 180 << "\t roll: "<< roll / PI * 180 << "\t yaw: "<< yaw / PI * 180  << std::endl;
-        std::cout << "pitch1: " << pitch1 / PI * 180 << "\t roll1: "<< roll1 / PI * 180 << "\t yaw1: "<< yaw1 / PI * 180  << std::endl;
+        // std::cout << "pitch: " << pitch / PI * 180 << "\t roll: "<< roll / PI * 180 << "\t yaw: "<< yaw / PI * 180  << std::endl;
+        // std::cout << "pitch1: " << pitch1 / PI * 180 << "\t roll1: "<< roll1 / PI * 180 << "\t yaw1: "<< yaw1 / PI * 180  << std::endl;
+        std::cout << "count: " << count << std::endl;
 
         // 在图像上绘制矩形
         for (int i = 0; i < 4; i++) {
@@ -240,9 +292,48 @@ void processFrame(cv::Mat &frame, cv::Mat &cameraMatrix, cv::Mat &distCoeffs) {
         }
 
         // 可视化世界坐标系
-        drawAxis(frame, rvec, tvec, cameraMatrix, distCoeffs);
-        cv::imshow("frame", binary);
-        waitKey(0);
+        drawAxis(frame, rvec, tvec, cameraMatrix, distCoeffs, count);
+        
+        
+        // 创建图表区域
+        cv::Rect chartArea(50, 50, 400, 200); 
+        cv::rectangle(frame, chartArea, cv::Scalar(255, 255, 255), 2);
+        
+        // 设置文本属性
+        int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+        double fontScale = 0.8;
+        int thickness = 2;
+        cv::Scalar textColor(255, 255, 255);
+        
+        // 绘制标题
+        cv::putText(frame, "Angle Values", 
+                    cv::Point(chartArea.x + 10, chartArea.y + 30),
+                    fontFace, fontScale, textColor, thickness);
+        
+        // 绘制角度值
+        char angleText[100];
+        sprintf(angleText, "Alpha: %.2f deg", alpha);
+        cv::putText(frame, angleText,
+                    cv::Point(chartArea.x + 10, chartArea.y + 70),
+                    fontFace, fontScale, cv::Scalar(0, 0, 255), thickness);
+        
+        sprintf(angleText, "Beta:  %.2f deg", beta);
+        cv::putText(frame, angleText,
+                    cv::Point(chartArea.x + 10, chartArea.y + 110),
+                    fontFace, fontScale, cv::Scalar(0, 255, 0), thickness);
+        
+        sprintf(angleText, "Phi:   %.2f deg", phi);
+        cv::putText(frame, angleText,
+                    cv::Point(chartArea.x + 10, chartArea.y + 150),
+                    fontFace, fontScale, cv::Scalar(255, 0, 0), thickness);
+        
+        // 绘制计数器
+        sprintf(angleText, "Count: %d", count);
+        cv::putText(frame, angleText,
+                    cv::Point(chartArea.x + 10, chartArea.y + 190),
+                    fontFace, fontScale, cv::Scalar(255, 255, 0), thickness);
+        waitKey(1);
+        
         // 找到第一个矩形后退出循环
         break;
       }
@@ -317,6 +408,7 @@ int main() {
   void *handle = NULL;
   unsigned char *pConvertData = NULL;
   unsigned int nConvertDataSize = 0;
+  int count = 0;
   cv::Mat cameraMatrix = (cv::Mat_<double>(3, 3) << 2383.72, 0, 728.1911, 0,
                           2383.836, 591.0267, 0, 0, 1);
   cv::Mat distCoeffs = cv::Mat::zeros(5, 1, CV_64F); // 假设无畸变
@@ -480,14 +572,13 @@ int main() {
             break;
           }
 
-          // 使用 OpenCV 展示图像
           cv::Mat image;
           if (nChannelNum == 3) {
             image =
                 cv::Mat(stImageInfo.stFrameInfo.nHeight,
                         stImageInfo.stFrameInfo.nWidth, CV_8UC3, pConvertData);
             cv::cvtColor(image, image, cv::COLOR_RGB2BGR);
-            processFrame(image, cameraMatrix, distCoeffs);
+            processFrame(image, cameraMatrix, distCoeffs, count);
           } else if (nChannelNum == 1) {
             image =
                 cv::Mat(stImageInfo.stFrameInfo.nHeight,
