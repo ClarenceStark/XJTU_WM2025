@@ -51,8 +51,10 @@ private:
     std::deque<double> R_yaw_list;
     uint32_t FanChangeTime;
     WMDetector detector;
+    //=============================新增量=========================//
     std::vector<cv::Point3f> objectPoints;                  //世界系中关键点坐标
     cv::Mat _K_ ;                                           //相机内参
+    std::vector<cv::Point2f> imagePoints;                   //图像系中关键点
 
 public:
     /**
@@ -73,6 +75,15 @@ public:
     void clear();
    
     void startWMINet(cv::Mat &, Translator &);
+
+    void GetImagePoints(cv::Mat &);
+
+    void GetR_centerPoint();
+
+
+
+
+
     /**
      * @brief 输入图像的接口
      *
