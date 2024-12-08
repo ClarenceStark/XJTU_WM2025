@@ -8,7 +8,6 @@
 
 #include "WMPredict.hpp"
 #include "SerialPort.hpp"
-#include "WMFunction.hpp"
 #include "WMIdentify.hpp"
 #include "globalParam.hpp"
 #include "opencv2/core/mat.hpp"

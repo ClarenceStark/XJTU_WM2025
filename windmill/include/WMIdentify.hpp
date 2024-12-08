@@ -1,7 +1,6 @@
 #include <opencv2/core/types.hpp>
 #if !defined(__WMIDENTIFY_HPP)
 #define __WMIDENTIFY_HPP
-#include "WMFunction.hpp"
 #include "WMInference.hpp"
 #include "globalParam.hpp"
 #include "globalText.hpp"
@@ -16,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <Eigen/Dense>
 
 class WMIdentify
 {
@@ -46,7 +46,6 @@ private:
     int list_stat;
     double direction;
     std::deque<double> time_list;           //<! 时间队列
-    std::deque<double> roll_list;           //<! roll队列，用于angle初收集
     std::deque<double> angle_list;          //<! 角度队列
     std::deque<double> angle_velocity_list; //<! 角速度队列
     std::deque<double> R_yaw_list;
@@ -54,7 +53,6 @@ private:
     WMDetector detector;
     std::vector<cv::Point3f> objectPoints;                  //世界系中关键点坐标
     cv::Mat _K_ ;                                           //相机内参
-    
 
 public:
     /**
@@ -73,7 +71,7 @@ public:
      *
      */
     void clear();
-    void startWMIdentify(cv::Mat &, Translator &);
+   
     void startWMINet(cv::Mat &, Translator &);
     /**
      * @brief 输入图像的接口
@@ -93,44 +91,7 @@ public:
      * @param gp 全局参数结构体，通过引用输入
      */
     void getContours();
-    /**
-     * @brief 通过判断Wing的图形特征，获取若干Wing，并储存其索引在队列中。
-     *
-     * @param gp 全局参数结构体，通过引用输入
-     * @return int 0为没有找到Wing，1为找到了一个Wing，2为找到了不止一个Wing
-     */
-    int getValidWingHalfHierarchy();
-    /**
-     * @brief 通过轮廓的拓扑关系筛选找到的若干Wing并留下真正的Wing的索引
-     *
-     * @return int 0代表选择失败，1代表选择成功
-     */
-    int selectWing();
-    /**
-     * @brief 通过漫水处理的方法找到装甲板，返回索引
-     *
-     * @param gp 全局参数结构体，通过引用输入
-     * @return int 0代表失败，1代表成功
-     */
-    int getValidWingHatHierarchy();
-    /**
-     * @brief 通过判断Winghat的图形特征，获取若干Wing，并储存其索引在队列中。
-     *
-     * @return int 0为没有找到Winghat，1为找到了一个Winghat，2为找到了不止一个Winghat
-     */
-    int selectWingHat();
-    /**
-     * @brief 通过Winghat与Wing筛选找到的若干Winghat并留下真正的Winghat的索引
-     *
-     * @return int 0代表失败，1代表成功
-     */
-    int getArmorCenterFloodfill();
-    /**
-     * @brief 通过角点检测方法找到扇叶
-     *
-     * @return int 0代表失败，1代表成功
-     */
-    int getWingCenterapproxPolyDP();
+   
     /**
      * @brief 通过判断R的图形特征，获取若干R，并储存其索引在队列中。
      *
@@ -169,6 +130,26 @@ public:
      * @param translator 状态位，每回到自瞄一次就清理一次
      */
     void JudgeClear(Translator translator);
+    
+    /**
+    * @brief 判断是否是R
+    *
+    * @param contour 输入的轮廓
+    * @param gp 全局变量结构体
+    * @return true 是R
+    * @return false 不是R
+    */
+    bool IsVaildR(std::vector<cv::Point> contour, GlobalParam &gp);
+  
+    /**
+    * @brief 通过输入的点与中心点坐标计算旋转角
+    *
+    * @param p1 点坐标
+    * @param center 中心点坐标
+    * @return double 返回弧度制角度
+    */
+    double CalAngle(cv::Point p1, cv::Point center);
+    double CalDistSquare(cv::Point2f p1, cv::Point2f p2);
     double getDirection();
     double getAngleList();
     double getYaw();
