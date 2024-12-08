@@ -29,7 +29,7 @@
 
 //=====常量=====//
 static double g = 9.8;       // 重力加速度
-static double k = 0.05;      // 空气阻力系数
+static double k = 0.05;      // 空气阻力系数  //考虑了子弹质量？
 static double r = 0.7;       // 符的半径
 static double s = 7.3;         // 车距离符的水平距离
 static double Exp = 2.71823; // 自然常数e
@@ -489,9 +489,10 @@ cv::Point2d WMIPredict::CalPointGuess(double theta)
     return point_guess;
 }
 
-double WMIPredict::f1(double P0, double fly_t0, double theta_0, double v0)
+double WMIPredict::f1(double P0, double fly_t0, double theta_0, double v0, double alpha)
 {
-    return sqrt(pow(r * cos(theta_0 + w * fly_t0), 2) + s * s) - v0 * cos(P0) / k + v0 / k * cos(P0) * pow(Exp, -k * fly_t0);
+    return sqrt(pow(r * cos(theta_0 + w * fly_t0), 2) + s * s + 2 * r * s * cos(theta_0 + w * fly_t0) * sin(alpha)) \
+     - v0 * cos(P0) / k + v0 / k * cos(P0) * pow(Exp, -k * fly_t0);
 }
 
 double WMIPredict::f2(double P0, double fly_t0, double theta_0, double v0)
@@ -503,9 +504,11 @@ double WMIPredict::f1P(double P, double fly_t, double theta_0, double v0) // f1�
 {
     return v0 * sin(P) / k * (1 - pow(Exp, -k * fly_t));
 }
-double WMIPredict::f1t(double P, double fly_t, double theta_0, double v0) // f1关于t的导数
+double WMIPredict::f1t(double P, double fly_t, double theta_0, double v0, double alpha) // f1关于t的导数
 {
-    return (-r * r * w * cos(theta_0 + w * fly_t) * sin(theta_0 + w * fly_t)) / sqrt(pow(r * cos(theta_0 + w * fly_t), 2) + s * s) - v0 * cos(P) * pow(Exp, -k * fly_t);
+    return (-r * r * w * cos(theta_0 + w * fly_t) * sin(theta_0 + w * fly_t) - r * s * w * sin(theta_0 + w * fly_t) * sin(alpha)) \
+    / sqrt(pow(r * cos(theta_0 + w * fly_t), 2) + s * s + 2 * r * s * cos(theta_0 + w * fly_t0) * sin(alpha)) \
+    - v0 * cos(P) * pow(Exp, -k * fly_t);
 }
 double WMIPredict::f2P(double P, double fly_t, double theta_0, double v0) // f2关于p的导数
 {
@@ -516,9 +519,11 @@ double WMIPredict::f2t(double P, double fly_t, double theta_0, double v0) // f2�
     return w * r * cos(theta_0 + w * fly_t) - (k * v0 * sin(P) + g) * pow(Exp, -k * fly_t) / k + g / k;
 }
 
-double WMIPredict::F1(double P0, double fly_t0, double theta_0, double v0)
+double WMIPredict::F1(double P0, double fly_t0, double theta_0, double v0 ,double alpha)
 {
-    return sqrt(pow(r * cos(theta_0 + ThetaToolForBig(fly_t0, this->Fire_time)), 2) + s * s) - v0 * cos(P0) / k + v0 / k * cos(P0) * pow(Exp, -k * fly_t0);
+    return sqrt(pow(r * cos(theta_0 + ThetaToolForBig(fly_t0, this->Fire_time)), 2) + s * s \
+    + 2 * r * s * cos(theta_0 + ThetaToolForBig(fly_t0, this->Fire_time)) * sin(alpha)) \
+    - v0 * cos(P0) / k + v0 / k * cos(P0) * pow(Exp, -k * fly_t0);
 }
 double WMIPredict::F2(double P0, double fly_t0, double theta_0, double v0)
 {
@@ -528,15 +533,19 @@ double WMIPredict::F1P(double P, double fly_t, double theta_0, double v0) // F1�
 {
     return v0 * sin(P) / k * (1 - pow(Exp, -k * fly_t));
 }
-double WMIPredict::F1t(double P, double fly_t, double theta_0, double v0) // f1关于t的导数
+double WMIPredict::F1t(double P, double fly_t, double theta_0, double v0, double alpha) // F1关于t的导数
 {
-    return (-r * r * w * cos(theta_0 + ThetaToolForBig(fly_t, this->Fire_time)) * sin(theta_0 + ThetaToolForBig(fly_t, this->Fire_time))) / sqrt(pow(r * cos(theta_0 + ThetaToolForBig(fly_t, this->Fire_time)), 2) + s * s) - v0 * cos(P) * pow(Exp, -k * fly_t);
+    return (-r * r * w * cos(theta_0 + ThetaToolForBig(fly_t, this->Fire_time)) * sin(theta_0 + ThetaToolForBig(fly_t, this->Fire_time)) \
+    - r * s * w * sin(theta_0 + ThetaToolForBig(fly_t, this->Fire_time)) * sin(alpha)) \
+    / sqrt(pow(r * cos(theta_0 + ThetaToolForBig(fly_t, this->Fire_time)), 2) + s * s \
+    + 2 * r * s * cos(theta_0 + ThetaToolForBig(fly_t0, this->Fire_time)) * sin(alpha)) \
+    - v0 * cos(P) * pow(Exp, -k * fly_t);
 }
-double WMIPredict::F2P(double P, double fly_t, double theta_0, double v0) // f2关于p的导数
+double WMIPredict::F2P(double P, double fly_t, double theta_0, double v0) // F2关于p的导数
 {
     return v0 * cos(P) / k * (pow(Exp, -k * fly_t) - 1);
 }
-double WMIPredict::F2t(double P, double fly_t, double theta_0, double v0) // f2关于t的导数
+double WMIPredict::F2t(double P, double fly_t, double theta_0, double v0) // F2关于t的导数
 {
     return w * r * cos(theta_0 + ThetaToolForBig(fly_t, this->Fire_time)) - (k * v0 * sin(P) + g) * pow(Exp, -k * fly_t) / k + g / k;
 }
